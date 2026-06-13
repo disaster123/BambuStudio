@@ -707,6 +707,10 @@ if (UNIX AND NOT APPLE)
 endif ()
 
 add_library(libslic3r_gui STATIC ${SLIC3R_GUI_SOURCES})
+if (TARGET device_page_build)
+    # Ensure the generated DeviceWeb dist exists before AppImage/resource packaging.
+    add_dependencies(libslic3r_gui device_page_build)
+endif ()
 
 if (TARGET device_page_build)
     add_dependencies(libslic3r_gui device_page_build)
