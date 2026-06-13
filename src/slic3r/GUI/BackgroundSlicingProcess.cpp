@@ -28,6 +28,12 @@
 #include <stdexcept>
 #include <cctype>
 #include <chrono>
+#include <mutex>
+
+#ifdef __linux__
+#include <csignal>
+#include <setjmp.h>
+#endif
 
 #include <boost/format/format_fwd.hpp>
 #include <boost/filesystem/operations.hpp>
@@ -39,6 +45,117 @@
 #include "slic3r/GUI/Plater.hpp"
 
 namespace Slic3r {
+
+#ifdef __linux__
+namespace {
+
+constexpr int background_slicing_fatal_signals[] = { SIGSEGV, SIGBUS };
+
+struct BackgroundSlicingSignalContext {
+	sigjmp_buf               jump_buffer;
+	volatile sig_atomic_t    caught_signal = 0;
+};
+
+thread_local BackgroundSlicingSignalContext *background_slicing_signal_context = nullptr;
+
+std::mutex background_slicing_signal_mutex;
+unsigned int background_slicing_signal_guard_count = 0;
+struct sigaction background_slicing_previous_actions[
+	sizeof(background_slicing_fatal_signals) / sizeof(background_slicing_fatal_signals[0])];
+
+size_t background_slicing_signal_index(int signal_number)
+{
+	for (size_t i = 0; i < sizeof(background_slicing_fatal_signals) / sizeof(background_slicing_fatal_signals[0]); ++i)
+		if (background_slicing_fatal_signals[i] == signal_number)
+			return i;
+	return sizeof(background_slicing_fatal_signals) / sizeof(background_slicing_fatal_signals[0]);
+}
+
+void background_slicing_signal_handler(int signal_number, siginfo_t *info, void *context)
+{
+	if (background_slicing_signal_context != nullptr) {
+		background_slicing_signal_context->caught_signal = signal_number;
+		siglongjmp(background_slicing_signal_context->jump_buffer, 1);
+	}
+
+	// sigaction() affects the whole process. A fatal signal on any other thread must
+	// retain its previous disposition rather than being mistaken for a slicer crash.
+	const size_t index = background_slicing_signal_index(signal_number);
+	if (index >= sizeof(background_slicing_previous_actions) / sizeof(background_slicing_previous_actions[0]))
+		return;
+
+	const struct sigaction &previous = background_slicing_previous_actions[index];
+	if (previous.sa_handler == SIG_IGN) {
+		// Returning from an ignored fatal signal may immediately fault again at the
+		// same instruction, so restore the default terminating disposition.
+		struct sigaction default_action {};
+		default_action.sa_handler = SIG_DFL;
+		sigemptyset(&default_action.sa_mask);
+		sigaction(signal_number, &default_action, nullptr);
+		raise(signal_number);
+	} else if (previous.sa_handler == SIG_DFL || previous.sa_handler == nullptr) {
+		sigaction(signal_number, &previous, nullptr);
+		raise(signal_number);
+	} else if ((previous.sa_flags & SA_SIGINFO) != 0) {
+		previous.sa_sigaction(signal_number, info, context);
+	} else {
+		previous.sa_handler(signal_number);
+	}
+}
+
+bool install_background_slicing_signal_guard()
+{
+	std::lock_guard<std::mutex> lock(background_slicing_signal_mutex);
+	if (background_slicing_signal_guard_count++ != 0)
+		return true;
+
+	struct sigaction action {};
+	sigemptyset(&action.sa_mask);
+	for (int signal_number : background_slicing_fatal_signals)
+		sigaddset(&action.sa_mask, signal_number);
+	action.sa_sigaction = background_slicing_signal_handler;
+	action.sa_flags = SA_SIGINFO;
+
+	size_t installed_count = 0;
+	for (; installed_count < sizeof(background_slicing_fatal_signals) / sizeof(background_slicing_fatal_signals[0]); ++installed_count) {
+		if (sigaction(background_slicing_fatal_signals[installed_count], &action,
+			&background_slicing_previous_actions[installed_count]) != 0)
+			break;
+	}
+	if (installed_count == sizeof(background_slicing_fatal_signals) / sizeof(background_slicing_fatal_signals[0]))
+		return true;
+
+	while (installed_count > 0) {
+		--installed_count;
+		sigaction(background_slicing_fatal_signals[installed_count],
+			&background_slicing_previous_actions[installed_count], nullptr);
+	}
+	background_slicing_signal_guard_count = 0;
+	return false;
+}
+
+void uninstall_background_slicing_signal_guard()
+{
+	std::lock_guard<std::mutex> lock(background_slicing_signal_mutex);
+	assert(background_slicing_signal_guard_count > 0);
+	if (--background_slicing_signal_guard_count != 0)
+		return;
+
+	for (size_t i = 0; i < sizeof(background_slicing_fatal_signals) / sizeof(background_slicing_fatal_signals[0]); ++i)
+		sigaction(background_slicing_fatal_signals[i], &background_slicing_previous_actions[i], nullptr);
+}
+
+const char *background_slicing_signal_description(int signal_number)
+{
+	switch (signal_number) {
+	case SIGSEGV: return "Segmentation fault";
+	case SIGBUS:  return "Bus error";
+	default:      return "Fatal POSIX signal";
+	}
+}
+
+} // namespace
+#endif // __linux__
 
 bool SlicingProcessCompletedEvent::critical_error() const
 {
@@ -339,6 +456,28 @@ void BackgroundSlicingProcess::thread_proc()
 		std::exception_ptr exception;
 #ifdef _WIN32
 		this->call_process_seh_throw(exception);
+#elif defined(__linux__)
+		if (this->call_process_signal_guard(exception) != 0) {
+			// The signal may have left the background slicing task corrupted.
+			// Contain the failure without touching Print state again in this iteration.
+			lck.lock();
+			if (task_gen != m_task_generation) {
+				BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": crashed task (gen " << task_gen
+				                           << ") was superseded (current gen " << m_task_generation
+				                           << "), orphaned thread exiting";
+				lck.unlock();
+				return;
+			}
+			m_state = STATE_FINISHED;
+			SlicingProcessCompletedEvent evt(
+				m_event_finished_id, 0, SlicingProcessCompletedEvent::Error, exception);
+			BOOST_LOG_TRIVIAL(info) << __FUNCTION__
+				<< ": send POSIX signal crash as SlicingProcessCompletedEvent error";
+			wxQueueEvent(GUI::wxGetApp().mainframe->m_plater, evt.Clone());
+			lck.unlock();
+			m_condition.notify_one();
+			continue;
+		}
 #else
 		this->call_process(exception);
 #endif
@@ -446,6 +585,45 @@ void BackgroundSlicingProcess::call_process_seh_throw(std::exception_ptr &ex) th
 	}
 }
 #endif // _WIN32
+
+#ifdef __linux__
+int BackgroundSlicingProcess::call_process_signal_guard(std::exception_ptr &ex) throw()
+{
+	// This guard only contains crashes in the background slicing thread. It is not
+	// an application-wide recovery mechanism, nor a substitute for fixing the
+	// underlying slicer bug that raised the fatal signal.
+	if (! install_background_slicing_signal_guard()) {
+		BOOST_LOG_TRIVIAL(error) << __FUNCTION__
+			<< ": failed to install Linux background slicing signal handlers; continuing without signal containment";
+		this->call_process(ex);
+		return 0;
+	}
+
+	BackgroundSlicingSignalContext signal_context;
+	if (sigsetjmp(signal_context.jump_buffer, 1) == 0) {
+		background_slicing_signal_context = &signal_context;
+		this->call_process(ex);
+	}
+	background_slicing_signal_context = nullptr;
+	uninstall_background_slicing_signal_guard();
+
+	const int caught_signal = signal_context.caught_signal;
+	if (caught_signal != 0) {
+		// Logging and exception construction are intentionally performed after the
+		// signal handler has returned; the handler itself only records and jumps.
+		BOOST_LOG_TRIVIAL(error) << __FUNCTION__
+			<< ": contained fatal signal " << caught_signal << " ("
+			<< background_slicing_signal_description(caught_signal)
+			<< ") in background slicing thread bbl_BgSlcPcs";
+		try {
+			throw Slic3r::HardCrash(background_slicing_signal_description(caught_signal));
+		} catch (...) {
+			ex = std::current_exception();
+		}
+	}
+	return caught_signal;
+}
+#endif // __linux__
 
 void BackgroundSlicingProcess::call_process(std::exception_ptr &ex) throw()
 {
