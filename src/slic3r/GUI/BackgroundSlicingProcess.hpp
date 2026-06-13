@@ -247,6 +247,11 @@ private:
 	// returned by call_process_seh().
 	void    	  call_process_seh_throw(std::exception_ptr &ex) throw();
 #endif // _WIN32
+#ifdef __linux__
+	// Contain fatal POSIX signals raised while slicing on the background thread.
+	// Returns the caught signal number, or zero when no signal was caught.
+	int			  call_process_signal_guard(std::exception_ptr &ex) throw();
+#endif // __linux__
 
 	// Currently active print. It is one of m_fff_print and m_sla_print.
 	PrintBase				   *m_print 			 = nullptr;
