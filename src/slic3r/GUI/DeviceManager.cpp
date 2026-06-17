@@ -197,9 +197,9 @@ wxString Slic3r::get_stage_string(int stage)
     case 35:
         return _L("Pause (nozzle clog)");
     case 36:
-        return _L("Measuring motion percision");
+        return _L("Measuring motion precision");
     case 37:
-        return _L("Enhancing motion percision");
+        return _L("Enhancing motion precision");
     case 38:
         return _L("Measure motion accuracy");
     case 39:
@@ -4171,6 +4171,10 @@ DevAmsTray MachineObject::parse_vt_tray(json vtray)
             vt_tray.uuid = vtray["tray_uuid"].get<std::string>();
         else
             vt_tray.uuid = "0";
+        if (vtray.contains("tray_id_name"))
+            vt_tray.tray_id_name = vtray["tray_id_name"].get<std::string>();
+        else
+            vt_tray.tray_id_name = "";
 
         if (vtray.contains("cali_idx"))
             vt_tray.cali_idx = vtray["cali_idx"].get<int>();

@@ -116,6 +116,7 @@
 #include "ModelMall.hpp"
 #include "HintNotification.hpp"
 #include "BBLUtil.hpp"
+#include "fila_manager/wgtFilaManagerFeature.h"
 
 //#ifdef WIN32
 //#include "BaseException.h"
@@ -1440,8 +1441,25 @@ GUI_App::GUI_App()
     }
     this->init_download_path();
 
+#if defined(__WXOSX__)
+    m_macos_pending_pump_timer.Bind(wxEVT_TIMER, &GUI_App::on_macos_pending_pump, this);
+#endif
+
     reset_to_active();
 }
+
+#if defined(__WXOSX__)
+void GUI_App::on_macos_pending_pump(wxTimerEvent& WXUNUSED(evt))
+{
+    // STUDIO-18472: drain wx pending events ourselves. After the Filament Manager
+    // WKWebView churn the macOS run loop no longer reliably wakes to call
+    // ProcessPendingEvents() from its observer, which strands deferred actions
+    // (project restore, tab-bar page switches posted via wxPostEvent). The
+    // HasPendingEvents() guard makes this a no-op on the common (healthy) path.
+    if (wxTheApp && wxTheApp->HasPendingEvents())
+        wxTheApp->ProcessPendingEvents();
+}
+#endif
 
 void GUI_App::shutdown()
 {
@@ -3286,30 +3304,41 @@ bool GUI_App::on_init_inner()
     // Let the libslic3r know the callback, which will translate messages on demand.
     Slic3r::I18N::set_translate_callback(libslic3r_translate_callback);
 
-    // Initialize Filament Manager store & sync
-    if (!m_fila_manager_store) {
-        m_fila_manager_store = new wgtFilaManagerStore();
-        m_fila_manager_store->load();
-        BOOST_LOG_TRIVIAL(info) << "Filament Manager store initialized";
-    }
-    if (!m_fila_manager_sync) {
-        m_fila_manager_sync = new wgtFilaManagerSync(m_fila_manager_store);
-        BOOST_LOG_TRIVIAL(info) << "Filament Manager sync initialized";
-    }
-    // Cloud layer — owns HTTP client, high-level sync and the serialization dispatcher.
-    if (!m_fila_manager_cloud_client) {
-        m_fila_manager_cloud_client = new wgtFilaManagerCloudClient();
-        BOOST_LOG_TRIVIAL(info) << "Filament Manager cloud client initialized";
-    }
-    if (!m_fila_manager_cloud_sync) {
-        m_fila_manager_cloud_sync = new wgtFilaManagerCloudSync(m_fila_manager_store,
-                                                                m_fila_manager_cloud_client);
-        BOOST_LOG_TRIVIAL(info) << "Filament Manager cloud sync initialized";
-    }
-    if (!m_fila_manager_cloud_disp) {
-        m_fila_manager_cloud_disp = new wgtFilaManagerCloudDispatcher(m_fila_manager_cloud_sync,
-                                                                     m_fila_manager_cloud_client);
-        BOOST_LOG_TRIVIAL(info) << "Filament Manager cloud dispatcher initialized";
+#ifdef __APPLE__
+    constexpr bool is_macos = true;
+#else
+    constexpr bool is_macos = false;
+#endif
+    m_disable_fila_manager = is_fila_manager_disabled_by_config(
+        app_config->get(FilaManagerEnabledConfigKey), is_macos);
+    if (m_disable_fila_manager) {
+        BOOST_LOG_TRIVIAL(info) << "Filament Manager disabled by " << FilaManagerEnabledConfigKey;
+    } else {
+        // Initialize Filament Manager store & sync
+        if (!m_fila_manager_store) {
+            m_fila_manager_store = new wgtFilaManagerStore();
+            m_fila_manager_store->load();
+            BOOST_LOG_TRIVIAL(info) << "Filament Manager store initialized";
+        }
+        if (!m_fila_manager_sync) {
+            m_fila_manager_sync = new wgtFilaManagerSync(m_fila_manager_store);
+            BOOST_LOG_TRIVIAL(info) << "Filament Manager sync initialized";
+        }
+        // Cloud layer — owns HTTP client, high-level sync and the serialization dispatcher.
+        if (!m_fila_manager_cloud_client) {
+            m_fila_manager_cloud_client = new wgtFilaManagerCloudClient();
+            BOOST_LOG_TRIVIAL(info) << "Filament Manager cloud client initialized";
+        }
+        if (!m_fila_manager_cloud_sync) {
+            m_fila_manager_cloud_sync = new wgtFilaManagerCloudSync(m_fila_manager_store,
+                                                                    m_fila_manager_cloud_client);
+            BOOST_LOG_TRIVIAL(info) << "Filament Manager cloud sync initialized";
+        }
+        if (!m_fila_manager_cloud_disp) {
+            m_fila_manager_cloud_disp = new wgtFilaManagerCloudDispatcher(m_fila_manager_cloud_sync,
+                                                                         m_fila_manager_cloud_client);
+            BOOST_LOG_TRIVIAL(info) << "Filament Manager cloud dispatcher initialized";
+        }
     }
 
     BOOST_LOG_TRIVIAL(info) << "create the main window";
@@ -4087,6 +4116,21 @@ void GUI_App::recreate_GUI(const wxString &msg_name)
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << "recreate_GUI enter";
     m_is_recreating_gui = true;
 
+#if defined(__WXOSX__)
+    // macOS root cause (STUDIO-18472): switching language rebuilds the MainFrame and
+    // defers destruction of the old one (old_main_frame->Destroy() below), which only
+    // completes once wxEVT_IDLE fires. If the old frame still hosts a live Filament
+    // Manager WKWebView (e.g. the language was changed while that tab was visible, or
+    // the asynchronous about:blank teardown from a tab switch had not finished yet),
+    // its React app keeps the CFRunLoop busy and starves idle app-wide, so the old
+    // frame is never collected and the new frame cannot render or switch tabs.
+    // Proactively suspend it here so the old frame is guaranteed quiet before its
+    // deferred destruction, independent of which tab was visible or how fast the user
+    // reached Preferences. No-op off macOS.
+    if (mainframe && mainframe->web_device())
+        mainframe->web_device()->Suspend();
+#endif
+
     update_http_extra_header();
 
     mainframe->shutdown();
@@ -4142,6 +4186,17 @@ void GUI_App::recreate_GUI(const wxString &msg_name)
     update_publish_status();
 
     m_is_recreating_gui = false;
+
+#if defined(__WXOSX__)
+    // STUDIO-18472: a GUI rebuild just happened (and trigger_restore_project()
+    // queued EVT_RESTORE_PROJECT). From here on the macOS run loop may fail to
+    // wake for wx pending events after the Filament Manager WKWebView churn, so
+    // arm the pending-event pump for the rest of the session. This dispatches
+    // the deferred restore promptly (prepare canvas no longer stays blank) and
+    // keeps later tab-bar page switches (posted via wxPostEvent) responsive.
+    if (!m_macos_pending_pump_timer.IsRunning())
+        m_macos_pending_pump_timer.Start(30);
+#endif
 
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << "recreate_GUI exit";
 }
@@ -4554,15 +4609,15 @@ void GUI_App::request_user_logout()
         GUI::wxGetApp().stop_sync_user_preset();
 
         // Drop queued cloud ops so they don't fire against a stale user.
-        if (m_fila_manager_cloud_disp) {
+        if (!m_disable_fila_manager && m_fila_manager_cloud_disp) {
             m_fila_manager_cloud_disp->clear_pending();
         }
         // STUDIO-18155: 清 AMS auto-push 节流账本，避免账号 A 的 cooldown
         // 影响登入账号 B 后第一次 sync 触发 push 的时机。
-        if (m_fila_manager_cloud_sync) {
+        if (!m_disable_fila_manager && m_fila_manager_cloud_sync) {
             m_fila_manager_cloud_sync->throttle().clear_all();
         }
-        if (mainframe && mainframe->web_device()) {
+        if (!m_disable_fila_manager && mainframe && mainframe->web_device()) {
             mainframe->web_device()->NotifyFilamentSessionState();
         }
     }
@@ -5216,10 +5271,10 @@ void GUI_App::on_user_login_handle(wxCommandEvent &evt)
 
         // Trigger filament-manager cloud pull on the dispatcher queue; no-op if
         // already pulling.  Runs after login so auth token is available.
-        if (m_fila_manager_cloud_disp) {
+        if (!m_disable_fila_manager && m_fila_manager_cloud_disp) {
             m_fila_manager_cloud_disp->enqueue_pull();
         }
-        if (mainframe && mainframe->web_device()) {
+        if (!m_disable_fila_manager && mainframe && mainframe->web_device()) {
             mainframe->web_device()->NotifyFilamentSessionState();
         }
     }

@@ -1364,12 +1364,22 @@ void MainFrame::init_tabpanel()
             // Defer hash navigation until after the notebook paints (macOS + WKWebView).
             CallAfter([this]() {
                 if (m_web_device && m_tabpanel && m_tabpanel->GetCurrentPage() == m_web_device)
-                    m_web_device->NavigateTo("/filament_manager");
+                    m_web_device->NavigateTo("/filament_manager", /*re_init=*/true);
             });
 #else
-            m_web_device->NavigateTo("/filament_manager");
+            // Switching back to this tab: re-run init() to pick up changes.
+            m_web_device->NavigateTo("/filament_manager", /*re_init=*/true);
 #endif
         }
+#if defined(__WXOSX__)
+        // macOS root cause fix: suspend the Filament Manager WKWebView whenever it
+        // is not the visible tab. Its live React SPA, if left mounted in a hidden
+        // webview, keeps the CFRunLoop busy and starves wxEVT_IDLE app-wide, which
+        // freezes the 3D canvas / tab switching on the prepare page and breaks the
+        // language-switch GUI rebuild. Returning to the tab reloads it (NavigateTo).
+        if (m_web_device && panel != m_web_device)
+            m_web_device->Suspend();
+#endif
 #ifndef __APPLE__
         if (sel == tp3DEditor) {
             m_topbar->EnableUndoRedoItems();
@@ -1453,8 +1463,10 @@ void MainFrame::init_tabpanel()
     m_calibration->SetBackgroundColour(*wxWHITE);
     m_tabpanel->AddPage(m_calibration, _L("Calibration"), std::string("tab_calibration_active"), std::string("tab_calibration_active"), false);
 
-    m_web_device = new DeviceWebPage(m_tabpanel);
-    m_tabpanel->AddPage(m_web_device, _L("Filament Manager"), std::string("tab_filament_active"), std::string("tab_filament_active"), false);
+    if (!wxGetApp().is_fila_manager_disabled()) {
+        m_web_device = new DeviceWebPage(m_tabpanel);
+        m_tabpanel->AddPage(m_web_device, _L("Filament Manager"), std::string("tab_filament_active"), std::string("tab_filament_active"), false);
+    }
 
     if (m_plater) {
         // load initial config
