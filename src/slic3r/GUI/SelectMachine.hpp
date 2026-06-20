@@ -361,7 +361,7 @@ protected:
     wxStaticBitmap*                     m_options_line_bmp{nullptr};
     Label*                              m_options_line_label{nullptr};
     Label*                              m_options_line_close{nullptr};
-    wxGridSizer*                        m_sizer_options{nullptr};
+    wxWrapSizer*                        m_sizer_options{nullptr};
     wxBoxSizer*                         m_sizer_thumbnail{ nullptr };
     wxPanel*                            m_pa_value_panel{nullptr};
     Label*                              m_pa_value_message{nullptr};
