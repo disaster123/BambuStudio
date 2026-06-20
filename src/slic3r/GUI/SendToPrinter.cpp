@@ -36,6 +36,7 @@ namespace GUI {
 #define EMMC_STORAGE "emmc"
 
 constexpr int timeout_period = 200000; // ms
+constexpr int SEND_TO_PRINTER_DIALOG_MIN_WIDTH = 760;
 
 wxDEFINE_EVENT(EVT_UPDATE_USER_MACHINE_LIST, wxCommandEvent);
 wxDEFINE_EVENT(EVT_PRINT_JOB_CANCEL, wxCommandEvent);
@@ -237,7 +238,9 @@ SendToPrinterDialog::SendToPrinterDialog(Plater *plater)
     m_line_top = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxSize(-1, 1), wxTAB_TRAVERSAL);
     m_line_top->SetBackgroundColour(wxColour(166, 169, 170));
 
-    m_scrollable_region       = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
+    m_scrollable_region       = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxTAB_TRAVERSAL);
+    m_scrollable_region->SetBackgroundColour(m_colour_def_color);
+    m_scrollable_region->SetScrollRate(0, FromDIP(10));
     m_sizer_scrollable_region = new wxBoxSizer(wxVERTICAL);
 
     m_panel_image = new wxPanel(m_scrollable_region, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
@@ -487,6 +490,7 @@ SendToPrinterDialog::SendToPrinterDialog(Plater *plater)
     m_sizer_scrollable_region->Add(m_sizer_basic, 0, wxALIGN_CENTER_HORIZONTAL, 0);
 	m_scrollable_region->SetSizer(m_sizer_scrollable_region);
 	m_scrollable_region->Layout();
+    m_scrollable_region->FitInside();
 
     //file name
     //rename normal
@@ -575,7 +579,7 @@ SendToPrinterDialog::SendToPrinterDialog(Plater *plater)
 
     m_sizer_main->Add(m_line_top, 0, wxEXPAND, 0);
     m_sizer_main->Add(0, 0, 0, wxTOP, FromDIP(10));
-    m_sizer_main->Add(m_scrollable_region, 0, wxALIGN_CENTER_HORIZONTAL, 0);
+    m_sizer_main->Add(m_scrollable_region, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(30));
     m_sizer_main->Add(0, 0, 0, wxEXPAND | wxTOP, FromDIP(6));
     m_sizer_main->Add(m_rename_switch_panel, 0, wxALIGN_CENTER_HORIZONTAL, 0);
     m_sizer_main->Add(0, 0, 0, wxEXPAND | wxTOP, FromDIP(6));
@@ -596,6 +600,7 @@ SendToPrinterDialog::SendToPrinterDialog(Plater *plater)
     show_print_failed_info(false);
     SetSizer(m_sizer_main);
     Layout();
+    SetMinSize(wxSize(FromDIP(SEND_TO_PRINTER_DIALOG_MIN_WIDTH), -1));
     Fit();
     Thaw();
 
@@ -675,10 +680,7 @@ void SendToPrinterDialog::update_storage_list(const std::vector<std::string> &st
            m_selected_storage = storages[0];
     }
 
-    m_storage_panel->Layout();
-    m_storage_panel->Fit();
-    Layout();
-    Fit();
+    relayout_after_runtime_update();
 }
 void SendToPrinterDialog::update_print_error_info(int code, std::string msg, std::string extra)
 {
@@ -704,8 +706,7 @@ void SendToPrinterDialog::show_print_failed_info(bool show, int code, wxString d
         else {
             m_sw_print_failed_info->Show(false);
         }
-        Layout();
-        Fit();
+        relayout_after_runtime_update();
     }
     else {
         if (!m_sw_print_failed_info->IsShown()) { return; }
@@ -713,8 +714,7 @@ void SendToPrinterDialog::show_print_failed_info(bool show, int code, wxString d
         m_st_txt_error_code->SetLabelText(wxEmptyString);
         m_st_txt_error_desc->SetLabelText(wxEmptyString);
         m_st_txt_extra_info->SetLabelText(wxEmptyString);
-        Layout();
-        Fit();
+        relayout_after_runtime_update();
     }
 }
 
@@ -743,8 +743,7 @@ void SendToPrinterDialog::sending_mode()
     m_comboBox_printer->Disable();
     if (m_simplebook->GetSelection() != 1){
         m_simplebook->SetSelection(1);
-        Layout();
-        Fit();
+        relayout_after_runtime_update();
     }
 }
 
@@ -762,8 +761,7 @@ void SendToPrinterDialog::update_priner_status_msg(wxString msg, bool is_warning
         if (!m_statictext_printer_msg->GetLabel().empty()) {
             m_statictext_printer_msg->SetLabel(wxEmptyString);
             m_statictext_printer_msg->Hide();
-            Layout();
-            Fit();
+            relayout_after_runtime_update();
         }
     } else {
         msg          = format_text(msg);
@@ -781,8 +779,7 @@ void SendToPrinterDialog::update_priner_status_msg(wxString msg, bool is_warning
                 m_statictext_printer_msg->SetMaxSize(wxSize(FromDIP(400), -1));
                 m_statictext_printer_msg->Wrap(FromDIP(400));
                 m_statictext_printer_msg->Show();
-                Layout();
-                Fit();
+                relayout_after_runtime_update();
             }
         }
     }
@@ -797,6 +794,19 @@ void SendToPrinterDialog::update_print_status_msg(wxString msg, bool is_warning,
     }
 }
 
+
+void SendToPrinterDialog::relayout_after_runtime_update()
+{
+    if (m_scrollable_region) {
+        m_scrollable_region->Layout();
+        m_scrollable_region->FitInside();
+    }
+
+    // wxGTK best-size calculations differ from MSW; repeatedly fitting the whole
+    // dialog during status/option updates can shrink it and clip lower controls.
+    Layout();
+    SendSizeEvent();
+}
 
 void SendToPrinterDialog::init_bind()
 {
@@ -1403,7 +1413,7 @@ void SendToPrinterDialog::show_status(PrintDialogStatus status, std::vector<wxSt
         m_connecting_panel->Show();
         m_animaicon->Play();
 
-        Layout();
+        relayout_after_runtime_update();
         Enable_Send_Button(false);
         Enable_Refresh_Button(false);
         return;
@@ -1415,7 +1425,7 @@ void SendToPrinterDialog::show_status(PrintDialogStatus status, std::vector<wxSt
             m_animaicon->Stop();
             m_animaicon->Enable();
 
-            Layout();
+            relayout_after_runtime_update();
             Enable_Send_Button(false);
             Enable_Refresh_Button(true);
             return;
@@ -1548,7 +1558,7 @@ void SendToPrinterDialog::on_dpi_changed(const wxRect &suggested_rect)
     m_button_ensure->SetMinSize(SELECT_MACHINE_DIALOG_BUTTON_SIZE);
     m_button_ensure->SetCornerRadius(FromDIP(12));
     m_status_bar->msw_rescale();
-    Fit();
+    relayout_after_runtime_update();
     Refresh();
 }
 
@@ -1633,10 +1643,7 @@ void SendToPrinterDialog::set_default()
         }
     }
 
-    m_scrollable_region->Layout();
-    m_scrollable_region->Fit();
-    Layout();
-    Fit();
+    relayout_after_runtime_update();
 
 
     wxSize screenSize = wxGetDisplaySize();
@@ -1678,8 +1685,7 @@ bool SendToPrinterDialog::Show(bool show)
         m_refresh_timer->Stop();
     }
 
-    Layout();
-    Fit();
+    relayout_after_runtime_update();
     if (show) { CenterOnParent(); }
 
     return DPIDialog::Show(show);
