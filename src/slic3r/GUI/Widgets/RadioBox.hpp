@@ -17,10 +17,10 @@ public:
 
 public:
     void SetValue(bool value) override;
-	bool GetValue() const;
+    bool GetValue() const;
     void Rescale();
     bool Disable() {
-        return wxBitmapToggleButton::Disable();
+        return Enable(false);
     }
     bool Enable(bool enable = true) override {
         return wxBitmapToggleButton::Enable(enable);
