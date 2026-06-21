@@ -1,6 +1,7 @@
 #include "CalibrationWizardPage.hpp"
 #include "I18N.hpp"
 #include "Widgets/Label.hpp"
+#include "Widgets/RadioBox.hpp"
 #include "MsgDialog.hpp"
 
 #include "DeviceCore/DevFilaSystem.h"

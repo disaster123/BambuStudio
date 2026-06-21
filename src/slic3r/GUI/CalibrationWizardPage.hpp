@@ -83,6 +83,8 @@ enum class CaliPageType {
     CALI_PAGE_COMMON_SAVE,
 };
 
+class RadioBox;
+
 class FilamentComboBox : public wxPanel
 {
 public:
@@ -100,8 +102,8 @@ public:
     CalibrateFilamentComboBox* GetComboBox() { return m_comboBox; }
     CheckBox* GetCheckBox() { return m_checkBox; }
     void SetCheckBox(CheckBox* cb) { m_checkBox = cb; }
-    wxRadioButton* GetRadioBox() { return m_radioBox; }
-    void SetRadioBox(wxRadioButton* btn) { m_radioBox = btn; }
+    RadioBox* GetRadioBox() { return m_radioBox; }
+    void SetRadioBox(RadioBox* btn) { m_radioBox = btn; }
     virtual bool Show(bool show = true);
     virtual bool Enable(bool enable);
     virtual void SetValue(bool value, bool send_event = true);
@@ -125,7 +127,7 @@ protected:
     bool m_is_bbl_filamnet{ false };
 
     CheckBox* m_checkBox{ nullptr };
-    wxRadioButton* m_radioBox{ nullptr };
+    RadioBox* m_radioBox{ nullptr };
     CalibrateFilamentComboBox* m_comboBox{ nullptr };
     wxStaticBitmap* m_nozzle_bmp{ nullptr };
     ComboBox* m_nozzle_combo{ nullptr };

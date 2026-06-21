@@ -20,8 +20,8 @@ public:
     bool Disable() {
         return wxBitmapToggleButton::Disable();
     }
-    bool Enable() {
-        return wxBitmapToggleButton::Enable();
+    bool Enable(bool enable = true) override {
+        return wxBitmapToggleButton::Enable(enable);
     }
 
 private:
