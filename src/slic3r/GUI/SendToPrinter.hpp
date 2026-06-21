@@ -23,6 +23,7 @@
 #include <wx/artprov.h>
 #include <wx/wrapsizer.h>
 #include <wx/srchctrl.h>
+#include <wx/scrolwin.h>
 
 #include "SelectMachine.hpp"
 #include "GUI_Utils.hpp"
@@ -52,6 +53,7 @@ class SendToPrinterDialog : public DPIDialog
 private:
     void init_bind();
     void init_timer();
+    void relayout_after_runtime_update();
 
     int                                 m_print_plate_idx;
     int                                 m_current_filament_id;
@@ -84,7 +86,7 @@ private:
     Button*                             m_rename_button{ nullptr };
     Button*                             m_button_refresh{ nullptr };
     Button*                             m_button_ensure{ nullptr };
-    wxPanel*                            m_scrollable_region;
+    wxScrolledWindow*                  m_scrollable_region;
     wxPanel*                            m_line_schedule{ nullptr };
     wxPanel*                            m_panel_sending{ nullptr };
     wxPanel*                            m_panel_prepare{ nullptr };
