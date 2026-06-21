@@ -667,13 +667,20 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
 
     auto options_sizer = new wxBoxSizer(wxVERTICAL);
 
-    // wxGTK font metrics can be wider than MSW; let print options wrap instead
-    // of forcing a fixed two-column grid that can overflow horizontally.
-    m_sizer_options = new wxWrapSizer(wxHORIZONTAL);
-    m_sizer_options->Add(option_timelapse, 0, wxRIGHT | wxBOTTOM, FromDIP(10));
-    m_sizer_options->Add(option_auto_bed_level, 0, wxRIGHT | wxBOTTOM, FromDIP(10));
-    m_sizer_options->Add(option_flow_dynamics_cali, 0, wxRIGHT | wxBOTTOM, FromDIP(10));
-    m_sizer_options->Add(option_nozzle_offset_cali_cali, 0, wxRIGHT | wxBOTTOM, FromDIP(10));
+    // wxGTK font metrics can be wider than MSW; use stable two-column option
+    // widths so labels and toggle controls remain inside the dialog.
+    const wxSize option_size(FromDIP(325), FromDIP(28));
+    for (auto option : {option_timelapse, option_auto_bed_level, option_flow_dynamics_cali, option_nozzle_offset_cali_cali}) {
+        option->SetMinSize(option_size);
+    }
+    m_sizer_options = new wxFlexGridSizer(0, 2, FromDIP(5), FromDIP(10));
+    m_sizer_options->AddGrowableCol(0, 1);
+    m_sizer_options->AddGrowableCol(1, 1);
+    m_sizer_options->SetFlexibleDirection(wxHORIZONTAL);
+    m_sizer_options->Add(option_timelapse, 1, wxEXPAND);
+    m_sizer_options->Add(option_auto_bed_level, 1, wxEXPAND);
+    m_sizer_options->Add(option_flow_dynamics_cali, 1, wxEXPAND);
+    m_sizer_options->Add(option_nozzle_offset_cali_cali, 1, wxEXPAND);
 
     m_options_line_panel = new wxPanel(m_options_other, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
     m_options_line_panel->SetBackgroundColour(*wxWHITE);
@@ -2403,7 +2410,7 @@ void SelectMachineDialog::update_options_layout()
     if (shown_options != toshow_options) {
         m_sizer_options->Clear();
         for (auto option : m_checkbox_list_order) {
-            if (option->IsShown()) { m_sizer_options->Add(option, 0, wxRIGHT | wxBOTTOM, FromDIP(10)); }
+            if (option->IsShown()) { m_sizer_options->Add(option, 1, wxEXPAND); }
         }
     }
 }
@@ -7180,7 +7187,7 @@ void PrintOption::update_title_display()
 
     wxGCDC dc;
     wxSize titleSize = dc.GetTextExtent(m_full_title);
-    int maxTitleWidth = FromDIP(150);
+    int maxTitleWidth = FromDIP(165);
 
     wxString displayTitle = m_full_title;
     if (titleSize.x > maxTitleWidth) {
