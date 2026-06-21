@@ -80,14 +80,12 @@ void CaliPresetCaliStagePanel::create_panel(wxWindow* parent)
     // Native wxGTK radio buttons can be nearly invisible before selection on
     // manually styled dark dialogs; use Bambu's RadioBox-backed control.
     m_complete_radioBox = new BBLRadioButton(parent, wxID_ANY, _L("Complete Calibration"));
-    m_complete_radioBox->SetForegroundColour(*wxBLACK);
 
     m_complete_radioBox->SetValue(true);
     m_stage = CALI_MANUAL_STAGE_1;
     m_top_sizer->Add(m_complete_radioBox);
     m_top_sizer->AddSpacer(FromDIP(10));
     m_fine_radioBox = new BBLRadioButton(parent, wxID_ANY, _L("Fine Calibration based on flow ratio"));
-    m_fine_radioBox->SetForegroundColour(*wxBLACK);
     m_top_sizer->Add(m_fine_radioBox);
 
     input_panel = new wxPanel(parent);
