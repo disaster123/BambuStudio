@@ -666,20 +666,28 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
 
     auto options_sizer = new wxBoxSizer(wxVERTICAL);
 
-    // wxGTK font metrics can be wider than MSW; use stable two-column option
-    // widths so labels and toggle controls remain inside the dialog.
+#ifdef __WXGTK__
+    // wxGTK font metrics and translated labels can exceed the half-width
+    // two-column layout, so Linux uses one vertical column to avoid clipping.
+    m_sizer_options = new wxBoxSizer(wxVERTICAL);
+    for (auto option : {option_timelapse, option_auto_bed_level, option_flow_dynamics_cali, option_nozzle_offset_cali_cali}) {
+        m_sizer_options->Add(option, 0, wxEXPAND | wxBOTTOM, FromDIP(5));
+    }
+#else
     const wxSize option_size(FromDIP(325), FromDIP(28));
     for (auto option : {option_timelapse, option_auto_bed_level, option_flow_dynamics_cali, option_nozzle_offset_cali_cali}) {
         option->SetMinSize(option_size);
     }
-    m_sizer_options = new wxFlexGridSizer(0, 2, FromDIP(5), FromDIP(10));
-    m_sizer_options->AddGrowableCol(0, 1);
-    m_sizer_options->AddGrowableCol(1, 1);
-    m_sizer_options->SetFlexibleDirection(wxHORIZONTAL);
-    m_sizer_options->Add(option_timelapse, 1, wxEXPAND);
-    m_sizer_options->Add(option_auto_bed_level, 1, wxEXPAND);
-    m_sizer_options->Add(option_flow_dynamics_cali, 1, wxEXPAND);
-    m_sizer_options->Add(option_nozzle_offset_cali_cali, 1, wxEXPAND);
+    auto options_grid_sizer = new wxFlexGridSizer(0, 2, FromDIP(5), FromDIP(10));
+    options_grid_sizer->AddGrowableCol(0, 1);
+    options_grid_sizer->AddGrowableCol(1, 1);
+    options_grid_sizer->SetFlexibleDirection(wxHORIZONTAL);
+    options_grid_sizer->Add(option_timelapse, 1, wxEXPAND);
+    options_grid_sizer->Add(option_auto_bed_level, 1, wxEXPAND);
+    options_grid_sizer->Add(option_flow_dynamics_cali, 1, wxEXPAND);
+    options_grid_sizer->Add(option_nozzle_offset_cali_cali, 1, wxEXPAND);
+    m_sizer_options = options_grid_sizer;
+#endif
 
     m_options_line_panel = new wxPanel(m_options_other, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
     m_options_line_panel->SetBackgroundColour(*wxWHITE);
@@ -2418,8 +2426,17 @@ void SelectMachineDialog::update_options_layout()
     if (shown_options != toshow_options) {
         m_sizer_options->Clear();
         for (auto option : m_checkbox_list_order) {
-            if (option->IsShown()) { m_sizer_options->Add(option, 1, wxEXPAND); }
+            if (option->IsShown()) {
+#ifdef __WXGTK__
+                m_sizer_options->Add(option, 0, wxEXPAND | wxBOTTOM, FromDIP(5));
+#else
+                m_sizer_options->Add(option, 1, wxEXPAND);
+#endif
+            }
         }
+        m_options_other->Layout();
+        m_scroll_area->FitInside();
+        Layout();
     }
 }
 
