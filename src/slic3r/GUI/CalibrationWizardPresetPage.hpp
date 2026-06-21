@@ -18,6 +18,7 @@ enum FlowRatioCaliSource {
 };
 
 class CalibrationPresetPage;
+class BBLRadioButton;
 
 class CaliPresetCaliStagePanel : public wxPanel
 {
@@ -40,8 +41,8 @@ public:
 protected:
     CaliPresetStage m_stage;
     wxBoxSizer*   m_top_sizer;
-    wxRadioButton* m_complete_radioBox;
-    wxRadioButton* m_fine_radioBox;
+    BBLRadioButton* m_complete_radioBox;
+    BBLRadioButton* m_fine_radioBox;
     TextInput *    flow_ratio_input;
     wxPanel*       input_panel;
     float m_flow_ratio_value;

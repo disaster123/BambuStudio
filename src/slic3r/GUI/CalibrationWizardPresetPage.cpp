@@ -77,15 +77,15 @@ void CaliPresetCaliStagePanel::create_panel(wxWindow* parent)
     m_top_sizer->Add(title);
     m_top_sizer->AddSpacer(FromDIP(15));
 
-    m_complete_radioBox = new wxRadioButton(parent, wxID_ANY, _L("Complete Calibration"));
-    m_complete_radioBox->SetForegroundColour(*wxBLACK);
+    // Native wxGTK radio buttons can be nearly invisible before selection on
+    // manually styled dark dialogs; use Bambu's RadioBox-backed control.
+    m_complete_radioBox = new BBLRadioButton(parent, wxID_ANY, _L("Complete Calibration"));
 
     m_complete_radioBox->SetValue(true);
     m_stage = CALI_MANUAL_STAGE_1;
     m_top_sizer->Add(m_complete_radioBox);
     m_top_sizer->AddSpacer(FromDIP(10));
-    m_fine_radioBox = new wxRadioButton(parent, wxID_ANY, _L("Fine Calibration based on flow ratio"));
-    m_fine_radioBox->SetForegroundColour(*wxBLACK);
+    m_fine_radioBox = new BBLRadioButton(parent, wxID_ANY, _L("Fine Calibration based on flow ratio"));
     m_top_sizer->Add(m_fine_radioBox);
 
     input_panel = new wxPanel(parent);
@@ -104,6 +104,8 @@ void CaliPresetCaliStagePanel::create_panel(wxWindow* parent)
     m_top_sizer->AddSpacer(PRESET_GAP);
     // events
     m_complete_radioBox->Bind(wxEVT_RADIOBUTTON, [this](auto& e) {
+        m_complete_radioBox->SetValue(true);
+        m_fine_radioBox->SetValue(false);
         m_stage_panel_parent->get_current_object()->GetCalib()->SetFlowRatioCalibType(COMPLETE_CALIBRATION);
         input_panel->Show(false);
         m_stage = CALI_MANUAL_STAGE_1;
@@ -111,6 +113,8 @@ void CaliPresetCaliStagePanel::create_panel(wxWindow* parent)
         GetParent()->Fit();
         });
     m_fine_radioBox->Bind(wxEVT_RADIOBUTTON, [this](auto& e) {
+        m_complete_radioBox->SetValue(false);
+        m_fine_radioBox->SetValue(true);
         m_stage_panel_parent->get_current_object()->GetCalib()->SetFlowRatioCalibType(FINE_CALIBRATION);
         input_panel->Show();
         m_stage = CALI_MANUAL_STAGE_2;
@@ -175,10 +179,12 @@ void CaliPresetCaliStagePanel::set_flow_ratio_value(float flow_ratio)
 void CaliPresetCaliStagePanel::set_flow_ratio_calibration_type(FlowRatioCalibrationType type) {
     if (type == COMPLETE_CALIBRATION) {
         m_complete_radioBox->SetValue(true);
+        m_fine_radioBox->SetValue(false);
         m_stage = CaliPresetStage::CALI_MANUAL_STAGE_1;
         input_panel->Hide();
     }
     else if (type == FINE_CALIBRATION) {
+        m_complete_radioBox->SetValue(false);
         m_fine_radioBox->SetValue(true);
         m_stage = CaliPresetStage::CALI_MANUAL_STAGE_2;
         input_panel->Show();
