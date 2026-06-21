@@ -2,6 +2,8 @@
 
 #include "../wxExtensions.hpp"
 
+#include <wx/sizer.h>
+
 #ifdef __WXGTK__
 #include <algorithm>
 #include <wx/dcmemory.h>
@@ -56,7 +58,7 @@ void RadioBox::SetValue(bool value)
     update();
 }
 
-bool RadioBox::GetValue()
+bool RadioBox::GetValue() const
 {
     return wxBitmapToggleButton::GetValue();
 }
@@ -88,6 +90,104 @@ void RadioBox::update() {
 
 }
 
-}
+BBLRadioButton::BBLRadioButton(wxWindow *parent, wxWindowID id, const wxString &label,
+                               const wxPoint &pos, const wxSize &size, long style)
+    : wxPanel(parent, id, pos, size, style)
+    , m_enabled_label_colour(parent ? parent->GetForegroundColour() : *wxBLACK)
+    , m_disabled_label_colour(wxColour(0xAC, 0xAC, 0xAC))
+{
+    if (parent) SetBackgroundColour(parent->GetBackgroundColour());
+
+    auto *sizer = new wxBoxSizer(wxHORIZONTAL);
+    m_radio = new RadioBox(this);
+    m_label = new wxStaticText(this, wxID_ANY, label);
+    m_label->SetForegroundColour(m_enabled_label_colour);
+
+    sizer->Add(m_radio, 0, wxALIGN_CENTER_VERTICAL);
+    sizer->AddSpacer(FromDIP(6));
+    sizer->Add(m_label, 0, wxALIGN_CENTER_VERTICAL);
+    SetSizer(sizer);
+
+    // Native wxGTK radio buttons can have poor unchecked contrast on manually
+    // styled dark backgrounds, so Bambu-styled dialogs should use RadioBox
+    // artwork and route clicks through this wrapper instead of GTK rendering.
+    auto click_handler = [this](wxEvent &event) {
+        if (!IsEnabled())
+            return;
+        SetValue(true);
+        send_radio_event();
+    };
+    Bind(wxEVT_LEFT_UP, click_handler);
+    m_radio->Bind(wxEVT_TOGGLEBUTTON, [this](wxCommandEvent &) {
+        if (!IsEnabled())
+            return;
+        SetValue(true);
+        send_radio_event();
+    });
+    m_label->Bind(wxEVT_LEFT_UP, click_handler);
 }
 
+void BBLRadioButton::SetValue(bool value)
+{
+    m_radio->SetValue(value);
+}
+
+bool BBLRadioButton::GetValue() const
+{
+    return m_radio->GetValue();
+}
+
+bool BBLRadioButton::Enable(bool enable)
+{
+    const bool result = wxPanel::Enable(enable);
+    m_radio->Enable(enable);
+    m_label->Enable(enable);
+    update_label_colour();
+    return result;
+}
+
+void BBLRadioButton::SetLabel(const wxString &label)
+{
+    m_label->SetLabel(label);
+}
+
+wxString BBLRadioButton::GetLabel() const
+{
+    return m_label->GetLabel();
+}
+
+bool BBLRadioButton::SetForegroundColour(const wxColour &colour)
+{
+    const bool result = wxPanel::SetForegroundColour(colour);
+    m_enabled_label_colour = colour;
+    update_label_colour();
+    return result;
+}
+
+bool BBLRadioButton::SetFont(const wxFont &font)
+{
+    const bool result = wxPanel::SetFont(font);
+    m_label->SetFont(font);
+    return result;
+}
+
+void BBLRadioButton::Rescale()
+{
+    m_radio->Rescale();
+    Layout();
+}
+
+void BBLRadioButton::send_radio_event()
+{
+    wxCommandEvent event(wxEVT_RADIOBUTTON, GetId());
+    event.SetEventObject(this);
+    ProcessWindowEvent(event);
+}
+
+void BBLRadioButton::update_label_colour()
+{
+    m_label->SetForegroundColour(IsEnabled() ? m_enabled_label_colour : m_disabled_label_colour);
+}
+
+}
+}
