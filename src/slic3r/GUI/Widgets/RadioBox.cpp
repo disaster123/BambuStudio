@@ -11,20 +11,25 @@ namespace Slic3r {
 namespace GUI {
 
 #ifdef __WXGTK__
-static wxBitmap make_visible_unchecked_radio_bitmap(wxWindow *, const wxBitmap &base)
+static int dip_from_window(wxWindow *win, int value)
+{
+    return win ? win->FromDIP(value) : value;
+}
+
+static wxBitmap make_visible_unchecked_radio_bitmap(wxWindow *win, const wxBitmap &base)
 {
     wxBitmap bmp(base);
     const wxSize size = ScalableBitmap::GetBmpSize(bmp);
     wxMemoryDC dc(bmp);
 
-    const int diameter = std::max(FromDIP(12), std::min(size.x, size.y) - FromDIP(4));
+    const int diameter = std::max(dip_from_window(win, 12), std::min(size.x, size.y) - dip_from_window(win, 4));
     const int x = (size.x - diameter) / 2;
     const int y = (size.y - diameter) / 2;
 
     // Linux/wxGTK native/stock radio artwork may be too dark on manually styled
     // AMS panels; enforce a light unchecked ring so empty slots remain visible.
     dc.SetBrush(*wxTRANSPARENT_BRUSH);
-    dc.SetPen(wxPen(wxColour(0xD0, 0xD0, 0xD0), std::max(1, FromDIP(2))));
+    dc.SetPen(wxPen(wxColour(0xD0, 0xD0, 0xD0), std::max(1, dip_from_window(win, 2))));
     dc.DrawEllipse(x, y, diameter, diameter);
     dc.SelectObject(wxNullBitmap);
     return bmp;
