@@ -350,6 +350,10 @@ private:
     std::vector<POItem> ops_auto;
     std::vector<POItem> ops_no_auto;
 
+    int  get_dialog_content_width() const;
+    void constrain_message_label(Label* label, int width = -1) const;
+    void refresh_scroll_layout(wxWindow* affected_panel = nullptr);
+
 protected:
     PrintFromType                       m_print_type{FROM_NORMAL};
     AmsMapingPopup                      m_mapping_popup{ nullptr };
