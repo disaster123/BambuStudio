@@ -129,6 +129,7 @@ void SelectMachineDialog::refresh_scroll_layout(wxWindow* affected_panel)
     if (m_scroll_area)
         m_scroll_area->FitInside();
     Layout();
+    SendSizeEvent();
 }
 void                SelectMachineDialog::init_machine_bed_types()
 {
@@ -2468,7 +2469,6 @@ void SelectMachineDialog::update_options_layout()
             }
         }
         refresh_scroll_layout(m_options_other);
-        Layout();
     }
 }
 
