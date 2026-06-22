@@ -81,6 +81,8 @@ wxDEFINE_EVENT(EVT_CLEAR_IPADDRESS, wxCommandEvent);
 
 #define WRAP_GAP FromDIP(2)
 
+static constexpr int SELECT_MACHINE_DIALOG_CONTENT_WIDTH_DIP = 670;
+
 static wxString task_canceled_text = _L("Task canceled");
 static int s_nozzle_mapping_last_request_time = 0;
 
@@ -103,6 +105,32 @@ std::string get_nozzle_volume_type_cloud_string(NozzleVolumeType nozzle_volume_t
 
 std::vector<wxString> SelectMachineDialog::MACHINE_BED_TYPE_STRING;
 std::vector<string> SelectMachineDialog::MachineBedTypeString;
+
+int SelectMachineDialog::get_dialog_content_width() const
+{
+    return FromDIP(SELECT_MACHINE_DIALOG_CONTENT_WIDTH_DIP);
+}
+
+void SelectMachineDialog::constrain_message_label(Label* label, int width) const
+{
+    if (!label)
+        return;
+
+    const int content_width = width > 0 ? width : get_dialog_content_width();
+    label->SetMinSize(wxSize(-1, -1));
+    label->SetMaxSize(wxSize(content_width, -1));
+    label->Wrap(content_width);
+}
+
+void SelectMachineDialog::refresh_scroll_layout(wxWindow* affected_panel)
+{
+    if (affected_panel)
+        affected_panel->Layout();
+    if (m_scroll_area)
+        m_scroll_area->FitInside();
+    Layout();
+    SendSizeEvent();
+}
 void                SelectMachineDialog::init_machine_bed_types()
 {
     if (MACHINE_BED_TYPE_STRING.size() == 0) {
@@ -503,6 +531,10 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
     m_link_edit_nozzle->Bind(wxEVT_ENTER_WINDOW, [this](auto &e) { SetCursor(wxCURSOR_HAND); });
     m_link_edit_nozzle->Bind(wxEVT_LEAVE_WINDOW, [this](auto &e) { SetCursor(wxCURSOR_ARROW); });
     m_link_edit_nozzle->SetLabel(_L("Not satisfied with the grouping of filaments? Regroup and slice ->"));
+    // Keep translated warning/info messages from increasing the wxScrolledWindow
+    // virtual width on wxGTK; otherwise lower option switches are laid out
+    // outside the visible content area and become clipped.
+    constrain_message_label(m_link_edit_nozzle);
 
     m_link_edit_nozzle->Bind(wxEVT_LEFT_DOWN, [this](auto &e) {
 
@@ -542,24 +574,22 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
     auto m_txt_mapping_sugs = new Label(m_scroll_area, wxEmptyString);
     m_txt_mapping_sugs->SetFont(::Label::Body_13);
     m_txt_mapping_sugs->SetForegroundColour(wxColour(0xFF, 0x6F, 0x00));
-    m_txt_mapping_sugs->SetMinSize(wxSize(FromDIP(580), -1));
-    m_txt_mapping_sugs->SetMaxSize(wxSize(FromDIP(580), -1));
     m_txt_mapping_sugs->SetBackgroundColour(*wxWHITE);
     m_txt_mapping_sugs->SetLabel(_L("Your filament grouping method in the sliced file is not optimal."));
+    constrain_message_label(m_txt_mapping_sugs);
     //m_mapping_sugs_sizer->Add(m_img_mapping_sugs, 0, wxALIGN_CENTER, 0);
-    m_mapping_sugs_sizer->Add(m_txt_mapping_sugs, 0, wxALIGN_CENTER, 0);
+    m_mapping_sugs_sizer->Add(m_txt_mapping_sugs, 0, wxEXPAND | wxALIGN_CENTER_VERTICAL, 0);
 
     m_change_filament_times_sizer = new wxBoxSizer(wxHORIZONTAL);
     //auto m_img_change_filament_times = new wxStaticBitmap(this, wxID_ANY, create_scaled_bitmap("warning", this, 16), wxDefaultPosition, wxSize(FromDIP(16), FromDIP(16)));
     m_txt_change_filament_times = new Label(m_scroll_area, wxEmptyString);
     m_txt_change_filament_times->SetFont(::Label::Body_13);
-    m_txt_change_filament_times->SetMinSize(wxSize(FromDIP(580), -1));
-    m_txt_change_filament_times->SetMaxSize(wxSize(FromDIP(580), -1));
     m_txt_change_filament_times->SetForegroundColour(wxColour(0xFF, 0x6F, 0x00));
     m_txt_change_filament_times->SetBackgroundColour(*wxWHITE);
     m_txt_change_filament_times->SetLabel(wxEmptyString);
+    constrain_message_label(m_txt_change_filament_times);
     //m_change_filament_times_sizer->Add(m_img_change_filament_times, 0, wxTOP, FromDIP(2));
-    m_change_filament_times_sizer->Add(m_txt_change_filament_times, 0, wxTOP, 0);
+    m_change_filament_times_sizer->Add(m_txt_change_filament_times, 0, wxEXPAND | wxTOP, 0);
 
     m_warn_when_drying_sizer = new wxBoxSizer(wxHORIZONTAL);
     m_txt_warn_when_drying = new Label(m_scroll_area, wxEmptyString);
@@ -567,7 +597,8 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
     m_txt_warn_when_drying->SetForegroundColour(wxColour("#F09A17"));
     m_txt_warn_when_drying->SetBackgroundColour(*wxWHITE);
     m_txt_warn_when_drying->SetLabel(_L("To ensure print quality, the drying temperature will be lowered during printing."));
-    m_warn_when_drying_sizer->Add(m_txt_warn_when_drying, 0, wxTOP, FromDIP(2));
+    constrain_message_label(m_txt_warn_when_drying);
+    m_warn_when_drying_sizer->Add(m_txt_warn_when_drying, 0, wxEXPAND | wxTOP, FromDIP(2));
 
     /*Advanced Options*/
     wxBoxSizer* sizer_split_options = new wxBoxSizer(wxHORIZONTAL);
@@ -699,7 +730,7 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
     m_options_line_label->SetBackgroundColour(*wxWHITE);
     m_options_line_label->SetForegroundColour(wxColour(255, 111, 0));
     m_options_line_label->SetFont(Label::Body_14);
-    m_options_line_label->Wrap(FromDIP(630));
+    constrain_message_label(m_options_line_label, get_dialog_content_width() - FromDIP(35));
 
     m_options_line_close = new Label(m_options_line_panel, _L("Don't show again"));
     m_options_line_close->SetBackgroundColour(*wxWHITE);
@@ -713,8 +744,7 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
             wxGetApp().app_config->set("disable_auto_flow_cali_tips", "true");
         }
         m_options_line_panel->Hide();
-        m_options_other->Layout();
-        m_scroll_area->FitInside();
+        refresh_scroll_layout(m_options_other);
     });
 
     m_options_line_right_sizer->Add(m_options_line_label, 0, wxEXPAND, 0);
@@ -722,9 +752,11 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
 
     m_options_line_sizer->Add(m_options_line_bmp, 0,   wxTOP, 0);
     m_options_line_sizer->Add(0, 0, 0, wxLEFT, FromDIP(2));
-    m_options_line_sizer->Add(m_options_line_right_sizer, 0,   wxEXPAND, 0);
+    m_options_line_sizer->Add(m_options_line_right_sizer, 1,   wxEXPAND, 0);
 
     m_options_line_panel->Hide();
+    m_options_line_panel->SetMinSize(wxSize(get_dialog_content_width(), -1));
+    m_options_line_panel->SetMaxSize(wxSize(get_dialog_content_width(), -1));
     m_options_line_panel->SetSizer(m_options_line_sizer);
     m_options_line_panel->Layout();
     m_options_line_panel->Fit();
@@ -740,6 +772,8 @@ SelectMachineDialog::SelectMachineDialog(Plater *plater)
     m_checkbox_list_order.push_back(option_flow_dynamics_cali);
     m_checkbox_list_order.push_back(option_nozzle_offset_cali_cali);
 
+    m_options_other->SetMinSize(wxSize(get_dialog_content_width(), -1));
+    m_options_other->SetMaxSize(wxSize(get_dialog_content_width(), -1));
     m_options_other->SetSizer(options_sizer);
     m_options_other->Layout();
     m_options_other->Fit();
@@ -2434,9 +2468,7 @@ void SelectMachineDialog::update_options_layout()
 #endif
             }
         }
-        m_options_other->Layout();
-        m_scroll_area->FitInside();
-        Layout();
+        refresh_scroll_layout(m_options_other);
     }
 }
 
@@ -2943,11 +2975,11 @@ void SelectMachineDialog::update_option_dynamic_state(MachineObject *obj)
         if (m_checkbox_list["flow_cali"]->getValue() == "auto") {
             m_options_line_label->SetLabel(_L("If the filament/nozzle of the main extruder hasn't changed, the last calibration value will be reused. The auxiliary extruder "
                                               "will use the system default value."));
-            m_options_line_label->Wrap(FromDIP(630));
+            constrain_message_label(m_options_line_label, get_dialog_content_width() - FromDIP(35));
             m_options_line_panel->Show(!options_line_ignore);
         } else if (m_checkbox_list["flow_cali"]->getValue() == "on") {
             m_options_line_label->SetLabel(_L("Before each print starts, calibration will be performed for the main extruder. The auxiliary extruder will use the system default value."));
-            m_options_line_label->Wrap(FromDIP(630));
+            constrain_message_label(m_options_line_label, get_dialog_content_width() - FromDIP(35));
             m_options_line_panel->Show(!options_line_ignore);
         } else {
             m_options_line_panel->Hide();
@@ -2965,8 +2997,7 @@ void SelectMachineDialog::update_option_dynamic_state(MachineObject *obj)
 
     if (m_options_line_panel->IsShown() != old_options_line_shown ||
         m_pa_value_panel->IsShown() != old_pa_shown) {
-        m_options_other->Layout();
-        m_scroll_area->FitInside();
+        refresh_scroll_layout(m_options_other);
     }
 }
 
@@ -3838,12 +3869,11 @@ void SelectMachineDialog::update_filament_change_count()
         m_change_filament_times_sizer->Show(true);
         m_txt_change_filament_times->Show(true);
         m_txt_change_filament_times->SetLabel(wxString::Format(_L("Cost %dg filament and %d changes more than optimal grouping."), saving_weight, hand_changes_count));
-        m_txt_change_filament_times->Wrap(FromDIP(580));
+        constrain_message_label(m_txt_change_filament_times);
         m_txt_change_filament_times->Layout();
     }
 
-    Layout();
-    Fit();
+    refresh_scroll_layout(m_scroll_area);
 }
 
 static wxString _check_kval_not_default(const MachineObject* obj, const std::vector<FilamentInfo> &mapping_result)
@@ -4023,8 +4053,8 @@ void SelectMachineDialog::update_show_status(MachineObject* obj_)
         const bool is_currently_shown = (m_txt_warn_when_drying != nullptr) ? m_txt_warn_when_drying->IsShown() : false;
         if (is_currently_shown != show_warn_when_drying) {
             m_warn_when_drying_sizer->Show(show_warn_when_drying);
-            Layout();
-            Fit();
+            constrain_message_label(m_txt_warn_when_drying);
+            refresh_scroll_layout(m_scroll_area);
         }
     }
 
