@@ -5,6 +5,7 @@ on:
     branches:
      - master
      - linux_master
+     - linux_master_rebase
     paths:
      - 'deps/**'
      - 'src/**'
@@ -18,6 +19,7 @@ on:
     branches:
      - master
      - linux_master
+     - linux_master_rebase
     paths:
      - 'deps/**'
      - 'src/**'
