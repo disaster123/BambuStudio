@@ -352,6 +352,10 @@ private:
     std::vector<POItem> ops_auto;
     std::vector<POItem> ops_no_auto;
 
+    int  get_dialog_content_width() const;
+    void constrain_message_label(Label* label, int width = -1) const;
+    void refresh_scroll_layout(wxWindow* affected_panel = nullptr);
+
 protected:
     PrintFromType                       m_print_type{FROM_NORMAL};
     AmsMapingPopup                      m_mapping_popup{ nullptr };
@@ -364,7 +368,7 @@ protected:
     wxStaticBitmap*                     m_options_line_bmp{nullptr};
     Label*                              m_options_line_label{nullptr};
     Label*                              m_options_line_close{nullptr};
-    wxGridSizer*                        m_sizer_options{nullptr};
+    wxSizer*                            m_sizer_options{nullptr};
     wxBoxSizer*                         m_sizer_thumbnail{ nullptr };
     wxPanel*                            m_pa_value_panel{nullptr};
     Label*                              m_pa_value_message{nullptr};
