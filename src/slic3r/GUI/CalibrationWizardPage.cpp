@@ -1,6 +1,7 @@
 #include "CalibrationWizardPage.hpp"
 #include "I18N.hpp"
 #include "Widgets/Label.hpp"
+#include "Widgets/RadioBox.hpp"
 #include "MsgDialog.hpp"
 
 #include "DeviceCore/DevFilaSystem.h"
@@ -393,7 +394,7 @@ bool FilamentComboBox::Enable(bool enable) {
         SetValue(false);
 
     if (m_radioBox)
-        enable ? m_radioBox->Enable() : m_radioBox->Disable();
+        m_radioBox->Enable(enable);
     if (m_checkBox)
         m_checkBox->Enable(enable);
     if (m_comboBox)
