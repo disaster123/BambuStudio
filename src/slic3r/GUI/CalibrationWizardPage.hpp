@@ -7,7 +7,6 @@
 #include "Widgets/TextInput.hpp"
 #include "Widgets/AMSControl.hpp"
 #include "Widgets/ProgressBar.hpp"
-#include "Widgets/RadioBox.hpp"
 #include "wxExtensions.hpp"
 #include "PresetComboBoxes.hpp"
 
@@ -83,6 +82,8 @@ enum class CaliPageType {
     CALI_PAGE_FLOW_SAVE,
     CALI_PAGE_COMMON_SAVE,
 };
+
+class RadioBox;
 
 class FilamentComboBox : public wxPanel
 {
